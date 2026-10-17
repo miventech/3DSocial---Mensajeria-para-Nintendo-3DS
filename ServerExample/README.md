@@ -1,97 +1,63 @@
-# ServerExample
+# Servidor de ejemplo de 3DSocial
 
-Servidor HTTP de ejemplo para Mensinger 3DS. Usa únicamente la biblioteca estándar de Python y guarda **todo el historial de texto, audio y fotos** en `messages.sqlite3` mediante SQLite. Los registros no se borran automáticamente al quitar un contacto ni al reiniciar el servidor.
+Este servidor usa **HTTP** en ambos modos. Por defecto, cifra cada petición y respuesta de la aplicación antes de enviarla por HTTP. Crea automáticamente una clave de transporte propia y una clave separada para el contenido de SQLite. La consola crea su clave efímera en cada petición y recuerda la clave pública del servidor; el jugador no instala certificados.
 
-## Iniciar
+## Inicio rápido
 
-En Windows, puedes iniciar el servidor haciendo doble clic en `IniciarServidor.bat`. La ventana de consola debe permanecer abierta mientras se usa el chat.
-
-También puedes iniciarlo desde esta carpeta, con Python 3.8 o posterior:
+En Windows, abre `IniciarServidorConCifrado.bat`. El archivo `IniciarServidor.bat` busca Python 3.8 o posterior e instala `cryptography` en ese mismo Python si falta. También puedes ejecutar:
 
 ```powershell
-py -3 server.py
+py -3 -m pip install cryptography
+py -3 server.py --host 0.0.0.0 --port 8080
 ```
 
-En macOS o Linux:
+En la 3DS, abre **Configuración → Conexión**, escribe la IPv4 local de la computadora y el puerto `8080`, y deja **Cifrar conexión: SI (HTTP cifrado)**. Pulsa **Probar** y guarda. `127.0.0.1` solo sirve desde la computadora, no desde la 3DS. El servidor y la app deben usar el mismo modo.
 
-```sh
-python3 server.py
-```
+Para una prueba con el protocolo antiguo en claro, abre `IniciarServidorSinCifrado.bat` y selecciona **NO (HTTP)** en la app. El modo en claro transmite ID, contraseña, token, mensajes y archivos legibles por la red. No abras ambos `.bat` sobre el mismo puerto a la vez.
 
-Por defecto escucha en todas las interfaces de red, puerto `8080`. Para elegir otro puerto o la ruta de datos:
+## Qué se crea automáticamente
 
-```powershell
-py -3 server.py --port 8080 --db messages.sqlite3
-```
-
-La consola debe permanecer abierta mientras se usa el chat. `Ctrl+C` detiene el servidor.
-
-### Interpretar la consola
-
-Al iniciar, verás la dirección HTTP y la ruta absoluta del archivo SQLite que está usando el proceso. Cada petición agrega una línea estándar de Python con la IP del cliente, fecha, método/ruta HTTP y código de respuesta. Por ejemplo:
-
-```text
-192.168.1.42 - - [16/Oct/2026 12:30:00] "GET /notificaciones/12345678 HTTP/1.1" 200 -
-```
-
-Esto significa que el equipo `192.168.1.42` consultó notificaciones y el servidor respondió `200` (correcto). Otros códigos habituales son `400` para datos inválidos, `404` para una ruta o medio inexistente, `415` para un formato de contenido no admitido y `500` para un fallo interno. El registro contiene la ruta y el resultado; no imprime el texto de los mensajes ni el contenido de fotos o audios. Los errores de base de datos pueden producir además una línea explicativa en la consola.
-
-## Conectar la 3DS
-
-1. Conecta la computadora y la 3DS a la misma red local.
-2. Busca la dirección IPv4 de la computadora con `ipconfig` en Windows o `ip addr` en Linux.
-3. En la app de 3DS abre **Configuración → Conexión**. En **Servidor HTTP** escribe solo la dirección IPv4, por ejemplo `192.168.1.50`, sin `http://` ni barra final. En **Puerto** escribe `8080`.
-4. Pulsa **Probar** y después **Guardar y volver**. Si Windows solicita acceso para Python en la red privada, permítelo.
-
-La dirección `127.0.0.1` solo sirve para probar desde la misma computadora; en la 3DS debes usar la dirección de la computadora en la red local. Si la computadora cambia de dirección IP, actualiza el ajuste en la app.
-
-## Rutas compatibles
-
-| Ruta | Respuesta |
+| Archivo | Función |
 | --- | --- |
-| `GET /version` | Texto simple, por defecto `v1.2.1` |
-| `POST /enviar` | Acepta JSON con `de`, `para` y `texto`; devuelve `OK` |
-| `GET /notificaciones/<id>` | ID del remitente pendiente o `NINGUNO` |
-| `GET /obtener_chat/<mi_id>/<contacto_id>` | Líneas `[id_remitente]: mensaje` en orden cronológico |
-| `GET /historial/<mi_id>/<contacto_id>?before=<id>&limit=20` | Página de hasta 20 mensajes de texto, audio y fotos; `before=0` trae los más recientes |
-| `POST /audio/<de>/<para>` | Recibe un WAV en el cuerpo (`Content-Type: audio/wav`) y devuelve el ID del mensaje |
-| `GET /audio/<id>` | Devuelve el WAV guardado para ese mensaje |
-| `POST /foto/<de>/<para>` | Recibe una foto capturada por la cámara en RGB565 400x240 y devuelve el ID del mensaje |
-| `GET /foto/<id>` | Devuelve la foto RGB565 guardada para ese mensaje |
-| `POST /perfil/<id>` | Guarda `username`, `nickname`, `bio` y `description` como JSON |
-| `GET /perfil/<id>` | Devuelve los datos del perfil como JSON |
-| `GET /perfiles?ids=<id1,id2,...>` | Devuelve como TSV los perfiles de hasta 50 contactos |
-| `POST /perfil/<id>/foto` | Guarda la foto de perfil BGR565 de 400×240 píxeles |
-| `GET /perfil/<id>/foto` | Devuelve la foto de perfil BGR565 |
-| `GET /perfil-miniaturas?ids=<id1,id2,id3>` | Devuelve miniaturas cuadradas 32×32 para hasta tres contactos visibles |
+| `messages.sqlite3` | Perfiles, mensajes, fotos, audios y metadatos. |
+| `messages.key` | Clave AES-256-GCM para contenido de SQLite; se crea una sola vez y se necesita para recuperar los mensajes. |
+| `transport.key` | Clave privada X25519 del servidor para el canal sobre HTTP; se crea una sola vez en modo cifrado. |
 
-Ejemplo de envío desde otra terminal:
+Puedes elegir otras rutas con `--db`, `--key` y `--transport-key`. Guarda **juntos** la base y las dos claves en tus copias de seguridad. No publiques los archivos `.key`. Si falta una clave de una instalación existente, restaura la original; regenerar `transport.key` hará que las consolas rechacen la nueva identidad hasta que cada usuario compruebe el cambio y restablezca su clave fijada.
 
-```sh
-curl -X POST http://127.0.0.1:8080/enviar -H "Content-Type: application/json" -d '{"de":"12345678","para":"87654321","texto":"Hola"}'
-```
+La consola guarda la clave pública en `sdmc:/3ds/Mensinger3DS/server-key-<host>-<puerto>.bin`. En el primer contacto la obtiene por HTTP sin enviar identidad, token ni contraseña y la fija para futuros contactos. Si cambia, detiene la conexión. La pantalla de error ofrece **R** para olvidar esa clave solo después de verificar con el administrador que el servidor legítimo cambió; la consola la obtiene de nuevo automáticamente. La consola no descarga certificados.
 
-```text
-GET /notificaciones/87654321  ->  12345678
-GET /obtener_chat/87654321/12345678  ->  [12345678]: Hola
-```
+## Cifrado de transporte
 
-Los IDs deben ser numéricos de 1 a 10 dígitos. El texto admite hasta 120 caracteres y una sola línea. `/obtener_chat` conserva el formato para clientes antiguos y muestra solo los textos recientes; `/historial` permite cargar todo el registro por páginas. Cada línea del protocolo nuevo contiene `id`, `remitente`, `tipo` (`texto`, `audio` o `foto`), `duración_ms` y `texto`, separados por tabuladores. Un cursor `before` excluye ese ID y devuelve mensajes anteriores.
+1. La consola pide `GET /clave-servidor`. El servidor devuelve `M3K1`, su clave pública X25519 de 32 bytes y un desafío aleatorio de 16 bytes válido durante 180 segundos.
+2. La consola compara la clave pública con la que guardó para ese host y puerto. Después crea 32 bytes aleatorios con el servicio `ps:ps` de 3DS y calcula una clave pública X25519 efímera.
+3. Ambas partes derivan 32 bytes con BLAKE2b-256 de `secreto_compartido || clave_publica_cliente || clave_publica_servidor || desafio || "Mensinger3DS-channel-v1"`.
+4. La consola cifra el método, ruta, ID, token, tipo de contenido y cuerpo con ChaCha20-Poly1305. Envía `M3Q1 || desafio || clave_publica_cliente || tag || ciphertext` a `POST /canal`. El desafío se consume una sola vez, incluso si el sobre falla, para impedir su repetición.
+5. El servidor valida tamaños, autenticación y ruta, ejecuta las validaciones y permisos originales, y devuelve `M3R1 || tag || ciphertext` con el estado y cuerpo internos cifrados.
 
-Las notas de voz usan WAV PCM mono de 16 bits a 10 910 Hz, con un límite de 30 segundos (654 644 bytes incluido el encabezado). El servidor comprueba el encabezado, la duración y el tamaño antes de guardarlas. La nueva app graba manteniendo pulsado **MIC**, envía al soltar, cancela con **B** y descarga el audio recibido al pulsar **Reproducir**. En el chat, **Anteriores** y **Recientes** recorren el historial.
+El nonce de petición son 12 bytes cero; el de respuesta termina en `01`. Son seguros aquí porque **cada desafío y clave efímera producen una clave diferente** y cada clave solo cifra una petición y una respuesta. Los AAD `M3DS1Q` y `M3DS1R` separan las direcciones. Los tamaños, el momento de los envíos, la dirección IP y las rutas exteriores `/clave-servidor` y `/canal` siguen visibles. El primer contacto usa confianza en el primer uso: alguien que controle la red en ese instante puede suplantar la clave inicial. Para una instalación que evite ese riesgo, preinstala el archivo público de 32 bytes por un canal confiable y comprueba la huella SHA-256 anunciada en la consola del servidor. Este canal tampoco ofrece secreto hacia adelante si se roba `transport.key` más tarde; para un servicio expuesto a Internet se recomienda TLS con una identidad certificada.
 
-Las fotos solo se pueden crear desde el botón **FOTO** de la app. La cámara exterior muestra una vista previa en vivo; después de tomar la foto, la app permite repetirla, descartarla o confirmar el envío. La imagen capturada mide 400x240 píxeles en RGB565 (192 000 bytes por foto). No hay una ruta para seleccionar archivos de la SD. Las fotos aparecen en el historial, se guardan en SQLite y la app las descarga a su caché de la SD al elegir **Ver grande**.
+Esto cifra datos **entre la consola y el servidor**, no entre usuarios. El servidor descifra las peticiones y puede leer sus contenidos. La contraseña de perfil sigue siendo necesaria para impedir que alguien use un ID conocido. El modo de transporte no cambia el cifrado de SQLite: cuerpos de texto, audio, fotos y miniaturas se guardan con AES-256-GCM también cuando `--cifrado-conexion no`. Los IDs, fechas, tipos y textos de perfil siguen consultables en la base; las cachés de la SD no están cifradas.
 
-Desde **L / Mi perfil** en contactos o **Y** en ajustes, la app permite editar nombre de usuario, apodo, biografía y descripción. **X** borra el campo seleccionado. La foto de perfil se toma con la misma cámara y se confirma antes de subirla. El texto se guarda también en `config.ini` de la SD y se puede volver a sincronizar desde la última fila de la pantalla de perfil. Los campos admiten hasta 32, 32, 120 y 120 caracteres, respectivamente. El servidor conserva la foto cuando se actualiza el texto, y conserva el texto cuando se cambia la foto.
-
-Al recibir una foto de perfil, el servidor conserva el original 400×240 y genera una miniatura BGR565 de 32×32 mediante recorte centrado cuadrado. La app solicita las miniaturas de las filas visibles y las muestra junto a los nombres; las miniaturas se guardan en caché en la SD.
-
-Una base creada con la versión anterior se amplía automáticamente al iniciar esta versión. Los textos existentes se conservan. Para hacer una copia completa del historial, detén el servidor y copia `messages.sqlite3`.
-
-Pruebas locales del servidor:
+## Configuración
 
 ```powershell
-py -3 -m unittest -v test_server.py
+py -3 server.py --host 0.0.0.0 --port 8080 --cifrado-conexion si
+py -3 server.py --host 0.0.0.0 --port 8080 --cifrado-conexion no
 ```
 
-Este ejemplo usa HTTP sin cifrado y los IDs no autentican usuarios. Úsalo en una red local de confianza; antes de publicarlo en Internet harían falta autenticación y transporte cifrado compatibles con el cliente.
+`si` es el valor predeterminado. `--version` cambia el texto de la ruta interna `/version`; `--db`, `--key` y `--transport-key` cambian las rutas de datos. En modo cifrado, las rutas habituales solo se aceptan dentro de `/canal`; las peticiones HTTP directas a mensajes, perfiles, contraseña y medios reciben 403. En modo en claro, se mantienen las rutas HTTP antiguas.
+
+La [documentación técnica](../docs/DOCUMENTACION_TECNICA.md) enumera todas las rutas internas, formatos de audio/foto, controles de autorización, esquema SQLite y el monitor. Para comprobar servidor y compatibilidad criptográfica:
+
+```powershell
+py -3 -m unittest discover -s ServerExample -p "test_*.py" -v
+```
+
+El monitor lee `messages.sqlite3` con `messages.key` en modo solo lectura; no usa `transport.key` ni se conecta al canal HTTP.
+
+## Bandeja de desconocidos y presencia
+
+La consola consulta `GET /remitentes/{id}` para recibir hasta 80 remitentes recientes en filas TSV: `id`, mensajes pendientes, total recibido y último ID de mensaje. La consulta no cambia el estado de lectura. La lista de contactos vive en la SD de cada consola, por lo que el cliente separa esas filas entre contactos y personas desconocidas. Al abrir una conversación, `/historial` marca como leídos los mensajes de ese remitente; su conversación sigue visible en Extraños hasta que se agregue a contactos.
+
+Cada consola envía `POST /presencia/{id}` aproximadamente cada 20 segundos mientras la app está activa. `GET /presencias/{id}?ids=id1,id2` consulta hasta 50 IDs. El servidor conserva los latidos solo en memoria y responde conectado si el último tiene menos de 60 segundos. Tras reiniciar el servidor todos aparecen desconectados hasta volver a enviar un latido. Las rutas privadas comprueban el token de sesión cuando el ID tiene contraseña. El monitor obtiene sus gráficas y galería directamente de SQLite y no altera la presencia ni los avisos.

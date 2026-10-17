@@ -3,27 +3,44 @@ setlocal
 REM Usa UTF-8 en los mensajes y ejecuta desde esta carpeta para localizar server.py.
 chcp 65001 >nul
 cd /d "%~dp0"
+set "PYTHON="
 
 echo Iniciando Mensinger 3DS...
 echo Carpeta: %CD%
 echo.
 
-where py >nul 2>nul
-if not errorlevel 1 (
-    REM El launcher py permite elegir explícitamente Python 3.
-    py -3 server.py %*
-    goto fin
+REM Comprueba que el launcher realmente encuentre Python 3; "where py" no basta.
+py -3 -c "import sys; sys.exit(sys.version_info < (3, 8))" >nul 2>nul
+if not errorlevel 1 set "PYTHON=py -3"
+if not defined PYTHON (
+    python -c "import sys; sys.exit(sys.version_info < (3, 8))" >nul 2>nul
+    if not errorlevel 1 set "PYTHON=python"
+)
+if not defined PYTHON goto sin_python
+
+%PYTHON% -c "import cryptography" >nul 2>nul
+if errorlevel 1 (
+    echo Falta cryptography en el Python que ejecuta el servidor.
+    echo Instalando la dependencia con ese mismo Python...
+    %PYTHON% -m pip install cryptography
+    if errorlevel 1 goto error_dependencia
+    %PYTHON% -c "import cryptography" >nul 2>nul
+    if errorlevel 1 goto error_dependencia
 )
 
-where python >nul 2>nul
-if not errorlevel 1 (
-    REM Alternativa para equipos que no tienen instalado el launcher py.
-    python server.py %*
-    goto fin
-)
+echo Python: %PYTHON%
+%PYTHON% server.py %*
+goto fin
 
-echo ERROR: No se encontro Python.
+:sin_python
+echo ERROR: No se encontro Python 3.8 o superior.
 echo Instala Python 3 y vuelve a ejecutar este archivo.
+goto fin
+
+:error_dependencia
+echo ERROR: No se pudo instalar cryptography.
+echo Comprueba la conexion a Internet y ejecuta: %PYTHON% -m pip install cryptography
+echo Despues vuelve a abrir IniciarServidor.bat.
 
 :fin
 REM Mantiene visible cualquier error de arranque hasta que el usuario cierre la ventana.
