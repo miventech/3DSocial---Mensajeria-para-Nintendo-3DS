@@ -78,7 +78,7 @@ El archivo DSP procede de tu consola. No hace falta incluirlo en este repositori
 
 ## Instalación de 3DSocial
 
-Los binarios compilados de esta copia local están en la raíz. Como `.gitignore` excluye `.cia` y `.3dsx`, al publicar el repositorio conviene adjuntarlos a una [Release de GitLab](https://docs.gitlab.com/user/project/releases/) para que otras personas puedan descargarlos. Elige uno de los formatos:
+Descarga los binarios desde las [Releases de GitHub](https://github.com/miventech/3DSocial---Mensajer-a-para-Nintendo-3DS/releases). El repositorio excluye `.cia` y `.3dsx` del historial de código; estos archivos se adjuntan a la versión publicada. Elige uno de los formatos:
 
 | Formato | Instalación | Inicio |
 | --- | --- | --- |
