@@ -1,5 +1,7 @@
 #include "AppState.hpp"
 
+// Compatibilidad del chat heredado y caché del historial paginado actual. La
+// identidad de servidor y los IDs de mensaje separan cachés y evitan duplicados.
 bool enviarMensajeServidor(const char* deID, const char* paraID, const char* mensaje) {
     // Envía texto por la ruta heredada POST /enviar para mantener compatibilidad.
     std::string cuerpo = "{\"de\":\"" + std::string(deID) + "\",\"para\":\"" +
@@ -10,24 +12,90 @@ bool enviarMensajeServidor(const char* deID, const char* paraID, const char* men
 }
 
 void verificarMensajesNuevos() {
-    // Consulta notificaciones pendientes y marca cada remitente con novedades.
+    // El resumen no consume avisos: el historial los marca leídos al abrir chat.
     RespuestaHttp respuesta;
-    if (!pedirHttp("GET", "/notificaciones/" + miID, NULL, "", respuesta, 512) ||
+    if (!pedirHttp("GET", "/remitentes/" + miID, NULL, "", respuesta, 8192) ||
         respuesta.estado != 200) return;
-    std::string idRemitente(respuesta.cuerpo.begin(), respuesta.cuerpo.end());
-    while (!idRemitente.empty() && (idRemitente.back() == '\n' ||
-           idRemitente.back() == '\r' || idRemitente.back() == ' ')) idRemitente.pop_back();
-    if (idRemitente.empty() || idRemitente == "NINGUNO") return;
-    bool hayNovedadNueva = false;
+    std::vector<RemitenteDesconocido> desconocidos;
     for (auto& contacto : listaContactos) {
-        if (contacto.id == idRemitente) {
-            if (!contacto.tieneNovedad) { contacto.tieneNovedad = true; hayNovedadNueva = true; }
-            break;
-        }
+        contacto.tieneNovedad = false;
+        contacto.pendientes = 0;
     }
-    if (hayNovedadNueva && !(estadoActual == PANTALLA_CHAT && contactoActivoID == idRemitente)) {
+    long ultimoPendiente = 0;
+    std::string contenido(respuesta.cuerpo.begin(), respuesta.cuerpo.end());
+    std::stringstream lineas(contenido);
+    std::string linea;
+    while (std::getline(lineas, linea)) {
+        std::stringstream campos(linea);
+        std::string id, pendientesTexto, totalTexto, ultimoTexto;
+        if (!std::getline(campos, id, '\t') || !std::getline(campos, pendientesTexto, '\t') ||
+            !std::getline(campos, totalTexto, '\t') || !std::getline(campos, ultimoTexto, '\t')) continue;
+        if (id.empty() || id.size() > 10 ||
+            !std::all_of(id.begin(), id.end(), [](char c) { return c >= '0' && c <= '9'; })) continue;
+        RemitenteDesconocido item;
+        item.id = id;
+        item.pendientes = std::max(0, atoi(pendientesTexto.c_str()));
+        item.total = std::max(0, atoi(totalTexto.c_str()));
+        item.ultimoId = strtol(ultimoTexto.c_str(), NULL, 10);
+        if (item.pendientes > 0 && item.ultimoId > ultimoPendiente &&
+            !(estadoActual == PANTALLA_CHAT && contactoActivoID == id)) ultimoPendiente = item.ultimoId;
+        bool conocido = false;
+        for (auto& contacto : listaContactos) {
+            if (contacto.id == id) {
+                contacto.tieneNovedad = item.pendientes > 0 &&
+                    !(estadoActual == PANTALLA_CHAT && contactoActivoID == id);
+                contacto.pendientes = contacto.tieneNovedad ? item.pendientes : 0;
+                conocido = true;
+                break;
+            }
+        }
+        if (!conocido) desconocidos.push_back(item);
+    }
+    g_desconocidos.swap(desconocidos);
+    g_scrollDesconocidos = std::max(0, std::min(g_scrollDesconocidos,
+        std::max(0, (int)g_desconocidos.size() - 3)));
+    g_seleccionDesconocidos = std::max(0, std::min(g_seleccionDesconocidos,
+        std::max(0, (int)g_desconocidos.size() - 1)));
+    if (ultimoPendiente > g_ultimoAvisoRecibido) {
         if (g_ledActivado) encenderLEDBlanco();
         if (g_sonidoActivado) reproducirCampanita();
+    }
+    g_ultimoAvisoRecibido = std::max(g_ultimoAvisoRecibido, ultimoPendiente);
+}
+
+void actualizarPresencias() {
+    // Un latido cada 20 s; presencia caduca en servidor a los 60 s sin actividad.
+    u64 ahora = osGetTime();
+    if (!miID.empty() && (g_ultimoLatidoPresencia == 0 || ahora - g_ultimoLatidoPresencia >= 20000)) {
+        RespuestaHttp respuesta;
+        pedirHttp("POST", "/presencia/" + miID, NULL, "", respuesta, 128);
+        g_ultimoLatidoPresencia = ahora;
+    }
+    if (listaContactos.empty() || (g_ultimaConsultaPresencias != 0 &&
+        ahora - g_ultimaConsultaPresencias < 20000)) return;
+    g_ultimaConsultaPresencias = ahora;
+    for (size_t desde = 0; desde < listaContactos.size(); desde += 50) {
+        std::string ruta = "/presencias/" + miID + "?ids=";
+        size_t fin = std::min(listaContactos.size(), desde + 50);
+        for (size_t i = desde; i < fin; ++i) {
+            if (i > desde) ruta += ",";
+            ruta += listaContactos[i].id;
+        }
+        RespuestaHttp respuesta;
+        if (!pedirHttp("GET", ruta, NULL, "", respuesta, 2048) || respuesta.estado != 200) {
+            for (size_t i = desde; i < fin; ++i) listaContactos[i].conectado = false;
+            return;
+        }
+        std::string texto(respuesta.cuerpo.begin(), respuesta.cuerpo.end());
+        std::stringstream lineas(texto);
+        std::string linea;
+        while (std::getline(lineas, linea)) {
+            size_t separador = linea.find('\t');
+            if (separador == std::string::npos) continue;
+            for (size_t i = desde; i < fin; ++i)
+                if (listaContactos[i].id == linea.substr(0, separador))
+                    listaContactos[i].conectado = linea.substr(separador + 1) == "1";
+        }
     }
 }
 
@@ -130,10 +198,18 @@ void cargarHistorialV2() {
 
 void fusionarHistorialV2(const std::vector<MensajeV2>& nuevos) {
     // Añade mensajes por ID sin duplicar los que ya estaban en la caché.
+    long ultimoAnterior = g_historialV2.empty() ? 0 : g_historialV2.back().id;
     for (const MensajeV2& m : nuevos) {
         auto it = std::lower_bound(g_historialV2.begin(), g_historialV2.end(), m.id,
             [](const MensajeV2& actual, long id) { return actual.id < id; });
         if (it == g_historialV2.end() || it->id != m.id) g_historialV2.insert(it, m);
+    }
+    if (estadoActual == PANTALLA_CHAT && ultimoAnterior > 0 &&
+        !g_historialV2.empty() && g_historialV2.back().id > ultimoAnterior &&
+        g_desplazamientoChat == 0) {
+        g_ultimoMensajeAnimadoId = g_historialV2.back().id;
+        g_ultimoMensajeAnimadoIndice = -1;
+        g_ultimoMensajeAnimacion = osGetTime();
     }
     if (g_audioSeleccionadoId == 0) {
         for (auto it = g_historialV2.rbegin(); it != g_historialV2.rend(); ++it) {
@@ -164,6 +240,10 @@ bool cargarPaginaV2(long antes) {
     if (antes > 0 && pagina.size() < 20) g_masAntiguos = false;
     if (antes > 0 && pagina.empty()) g_masAntiguos = false;
     fusionarHistorialV2(pagina);
+    RespuestaHttp conteo;
+    if (pedirHttp("GET", "/conteo/" + miID + "/" + contactoActivoID,
+                  NULL, "", conteo, 64) && conteo.estado == 200)
+        g_totalMensajesChat = atoi(std::string(conteo.cuerpo.begin(), conteo.cuerpo.end()).c_str());
     return true;
 }
 
@@ -192,6 +272,11 @@ void actualizarChatDesdeServidor(const char* myID, const char* friendID) {
         nuevosMensajes.push_back(linea);
     }
     if (!nuevosMensajes.empty()) {
+        if (nuevosMensajes.size() > historialChat.size() && estadoActual == PANTALLA_CHAT) {
+            g_ultimoMensajeAnimadoIndice = (int)nuevosMensajes.size() - 1;
+            g_ultimoMensajeAnimadoId = 0;
+            g_ultimoMensajeAnimacion = osGetTime();
+        }
         historialChat = nuevosMensajes;
         guardarHistorialEnSD(friendID);
     }

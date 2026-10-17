@@ -1,5 +1,9 @@
 #pragma once
 
+// Contrato de grabación/reproducción mono WAV. La llamada continuarNotaVoz se
+// ejecuta durante la captura; detenerNotaVoz cierra el archivo y decide si
+// conserva la grabación temporal para subirla.
+
 #include <3ds.h>
 #include <string>
 

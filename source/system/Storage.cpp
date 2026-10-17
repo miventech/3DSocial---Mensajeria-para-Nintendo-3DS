@@ -1,5 +1,8 @@
 #include "AppState.hpp"
 
+// Formato persistente local de identidad/contactos/preferencias. La SD conserva
+// estos archivos sin cifrar, por lo que las fotos y el historial local también
+// deben considerarse accesibles para quien pueda leer la tarjeta.
 std::string obtenerOGenerarID() {
     // El ID se conserva localmente para que reinstalar o reiniciar no cambie la identidad.
     mkdir("sdmc:/3ds/Mensinger3DS", 0777);
@@ -120,11 +123,19 @@ void guardarAjustesSD() {
         fprintf(f, "actualizaciones=%d\n", g_buscarActualizaciones ? 1 : 0);
         fprintf(f, "servidor=%s\n", g_servidorHost.c_str());
         fprintf(f, "puerto=%d\n", g_servidorPuerto);
+        fprintf(f, "cifrar_conexion=%d\n", g_cifrarConexion ? 1 : 0);
         fprintf(f, "intervalo_ms=%d\n", g_intervaloConsultaMs);
         fprintf(f, "perfil_nombre=%s\n", g_perfilNombre.c_str());
         fprintf(f, "perfil_apodo=%s\n", g_perfilApodo.c_str());
         fprintf(f, "perfil_bio=%s\n", g_perfilBio.c_str());
         fprintf(f, "perfil_descripcion=%s\n", g_perfilDescripcion.c_str());
+        fprintf(f, "mostrar_en_busqueda=%d\n", g_mostrarEnBusqueda ? 1 : 0);
+        fprintf(f, "quiero_conocer_gente=%d\n", g_quieroConocerGente ? 1 : 0);
+        fprintf(f, "color_chat=%d\n", g_colorChat);
+        fprintf(f, "color_fondo=%d\n", g_colorFondo);
+        fprintf(f, "color_texto=%d\n", g_colorTexto);
+        fprintf(f, "color_apodo=%d\n", g_colorApodo);
+        fprintf(f, "color_nombre=%d\n", g_colorNombre);
         fclose(f);
     }
 }
@@ -156,6 +167,8 @@ void cargarAjustesSD() {
             long puerto = strtol(valor.c_str(), &fin, 10);
             if (fin && *fin == '\0' && puerto >= 1 && puerto <= 65535) g_servidorPuerto = (int)puerto;
         }
+        else if (clave == "cifrar_conexion" && (valor == "0" || valor == "1"))
+            g_cifrarConexion = valor == "1";
         else if (clave == "intervalo_ms") {
             int intervalo = atoi(valor.c_str());
             if (intervalo == 1000 || intervalo == 2000 || intervalo == 5000 || intervalo == 10000) g_intervaloConsultaMs = intervalo;
@@ -164,6 +177,13 @@ void cargarAjustesSD() {
         else if (clave == "perfil_apodo") g_perfilApodo = valor;
         else if (clave == "perfil_bio") g_perfilBio = valor;
         else if (clave == "perfil_descripcion") g_perfilDescripcion = valor;
+        else if (clave == "mostrar_en_busqueda") g_mostrarEnBusqueda = valor == "1";
+        else if (clave == "quiero_conocer_gente") g_quieroConocerGente = valor == "1";
+        else if (clave == "color_chat") g_colorChat = std::max(0, std::min(5, atoi(valor.c_str())));
+        else if (clave == "color_fondo") g_colorFondo = std::max(0, std::min(5, atoi(valor.c_str())));
+        else if (clave == "color_texto") g_colorTexto = std::max(0, std::min(5, atoi(valor.c_str())));
+        else if (clave == "color_apodo") g_colorApodo = std::max(0, std::min(5, atoi(valor.c_str())));
+        else if (clave == "color_nombre") g_colorNombre = std::max(0, std::min(5, atoi(valor.c_str())));
     }
     fclose(f);
 }

@@ -1,5 +1,7 @@
 #include "AppState.hpp"
 
+// Tabla de idioma por índice TextoID. Mantener las dos filas alineadas con el
+// enum en AppState.hpp evita que una clave termine mostrando otra traducción.
 u8 obtenerIdiomaSistema() {
     // Si CFGU no responde se mantiene inglés, idioma inicial de respaldo.
     u8 lang = CFG_LANGUAGE_EN;
@@ -55,7 +57,7 @@ const char* getText(TextoID id) {
             "General",
             "Conexión",
             "Buscar actualizaciones",
-            "Servidor HTTP",
+            "Servidor",
             "Puerto",
             "Consultar mensajes",
             "Probar",
@@ -63,7 +65,7 @@ const char* getText(TextoID id) {
             "Conexión correcta",
             "No se pudo conectar",
             "Servidor o puerto inválido",
-            "Comunicación HTTP sin cifrado",
+            "HTTP con datos cifrados",
             "Anteriores",
             "Recientes",
             "Mantén para voz",
@@ -73,6 +75,7 @@ const char* getText(TextoID id) {
             "Audio no disponible",
             "B: cancelar",
             "B: descartar nota pendiente",
+            "Cifrar datos",
         },
         // --- 1: INGLÉS ---
         {
@@ -116,7 +119,7 @@ const char* getText(TextoID id) {
             "General",
             "Connection",
             "Check for updates",
-            "HTTP server",
+            "Server",
             "Port",
             "Check messages",
             "Test",
@@ -124,7 +127,7 @@ const char* getText(TextoID id) {
             "Connection successful",
             "Could not connect",
             "Invalid server or port",
-            "Unencrypted HTTP connection",
+            "HTTP with encrypted data",
             "Older",
             "Latest",
             "Hold for voice",
@@ -134,6 +137,7 @@ const char* getText(TextoID id) {
             "Audio unavailable",
             "B: cancel",
             "B: discard pending note",
+            "Encrypt data",
         }
     };
 

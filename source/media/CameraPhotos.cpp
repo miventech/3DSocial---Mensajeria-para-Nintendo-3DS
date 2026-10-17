@@ -1,5 +1,7 @@
 // Captura adaptada de FBI/source/core/task/capturecam.c (licencia MIT).
 // Aviso y licencia completos en THIRD_PARTY_FBI_LICENSE.txt.
+// CAMU captura frames lineales en un hilo; la interfaz copia una versión
+// consistente a textura Citro3D, cuyo almacenamiento usa orden Morton.
 #include "CameraPhotos.hpp"
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,6 +21,12 @@ static Tex3DS_SubTexture subTexturasMiniatura[3];
 static C2D_Image imagenesMiniatura[3];
 static bool miniaturaTexturaLista[3] = {false, false, false};
 static u16* mosaicosMiniatura[3] = {NULL, NULL, NULL};
+static C3D_Tex texturasFotoChat[3];
+static Tex3DS_SubTexture subTexturasFotoChat[3];
+static C2D_Image imagenesFotoChat[3];
+static bool fotoChatTexturaLista[3] = {false, false, false};
+static u16* mosaicosFotoChat[3] = {NULL, NULL, NULL};
+static long idsFotoChat[3] = {0, 0, 0};
 
 // La camara escribe en su propio buffer. El hilo publica cuadros completos
 // bajo mutex; la UI solo lee la copia estable en ultimoFotograma.
@@ -192,16 +200,8 @@ static u32 indiceMorton(u32 x, u32 y) {
            ((x & 4) << 2) | ((y & 4) << 3);
 }
 
-static u16 convertirBgr565aRgb565(u16 pixel) {
-    // Cambia la posición de los canales rojo y azul; verde conserva sus 6 bits.
-    u16 rojo = pixel & 0x1F;
-    u16 verde = (pixel >> 5) & 0x3F;
-    u16 azul = (pixel >> 11) & 0x1F;
-    return (rojo << 11) | (verde << 5) | azul;
-}
-
 bool cargarFotoVista(const std::string& ruta) {
-    // Las fotos recibidas y el perfil se guardan como bytes BGR565 en la SD.
+    // La cámara y las texturas GPU_RGB565 usan el mismo orden de canales.
     FILE* archivo = fopen(ruta.c_str(), "rb");
     if (!archivo) return false;
     u8* pixels = (u8*)malloc(FOTO_CAMARA_BYTES);
@@ -238,7 +238,7 @@ static bool cargarPixelsEnTextura(const u8* pixels) {
         for (u32 x = 0; x < FOTO_CAMARA_ANCHO; x++) {
             u32 tile = (y / 8) * (TEXTURA_ANCHO / 8) + (x / 8);
             u32 destino = tile * 64 + indiceMorton(x & 7, y & 7);
-            mosaicoFoto[destino] = convertirBgr565aRgb565(origen[y * FOTO_CAMARA_ANCHO + x]);
+            mosaicoFoto[destino] = origen[y * FOTO_CAMARA_ANCHO + x];
         }
     }
     memcpy(texturaFoto.data, mosaicoFoto, bytesTextura);
@@ -290,8 +290,8 @@ bool cargarMiniaturaContacto(int slot, const std::string& ruta) {
         for (u32 x = 0; x < PERFIL_MINIATURA_DIMENSION; ++x) {
             u32 tile = (y / 8) * (PERFIL_MINIATURA_DIMENSION / 8) + (x / 8);
             u32 destino = tile * 64 + indiceMorton(x & 7, y & 7);
-            mosaicosMiniatura[slot][destino] = convertirBgr565aRgb565(
-                origen[y * PERFIL_MINIATURA_DIMENSION + x]);
+            mosaicosMiniatura[slot][destino] =
+                origen[y * PERFIL_MINIATURA_DIMENSION + x];
         }
     }
     memcpy(texturasMiniatura[slot].data, mosaicosMiniatura[slot], bytes);
@@ -313,5 +313,69 @@ void cerrarMiniaturasContactos() {
         mosaicosMiniatura[slot] = NULL;
         imagenesMiniatura[slot].tex = NULL;
         imagenesMiniatura[slot].subtex = NULL;
+    }
+}
+
+bool cargarMiniaturaFotoChat(int slot, long id, const std::string& ruta) {
+    if (slot < 0 || slot >= 3 || id <= 0) return false;
+    FILE* archivo = fopen(ruta.c_str(), "rb");
+    if (!archivo) return false;
+    u8 pixels[CHAT_FOTO_MINI_BYTES];
+    bool leida = fread(pixels, 1, sizeof(pixels), archivo) == sizeof(pixels);
+    leida = fclose(archivo) == 0 && leida;
+    if (!leida) return false;
+
+    const u32 anchoTextura = 128;
+    const u32 altoTextura = 64;
+    const u32 bytesTextura = anchoTextura * altoTextura * 2;
+    if (!mosaicosFotoChat[slot]) mosaicosFotoChat[slot] = (u16*)linearAlloc(bytesTextura);
+    if (!mosaicosFotoChat[slot]) return false;
+    if (!fotoChatTexturaLista[slot]) {
+        fotoChatTexturaLista[slot] = C3D_TexInit(&texturasFotoChat[slot],
+            anchoTextura, altoTextura, GPU_RGB565);
+        if (!fotoChatTexturaLista[slot]) return false;
+        C3D_TexSetFilter(&texturasFotoChat[slot], GPU_LINEAR, GPU_LINEAR);
+        subTexturasFotoChat[slot].width = CHAT_FOTO_MINI_ANCHO;
+        subTexturasFotoChat[slot].height = CHAT_FOTO_MINI_ALTO;
+        subTexturasFotoChat[slot].left = 0.0f;
+        subTexturasFotoChat[slot].top = 1.0f;
+        subTexturasFotoChat[slot].right = (float)CHAT_FOTO_MINI_ANCHO / anchoTextura;
+        subTexturasFotoChat[slot].bottom = 1.0f - (float)CHAT_FOTO_MINI_ALTO / altoTextura;
+        imagenesFotoChat[slot].tex = &texturasFotoChat[slot];
+        imagenesFotoChat[slot].subtex = &subTexturasFotoChat[slot];
+    }
+    memset(mosaicosFotoChat[slot], 0, bytesTextura);
+    const u16* origen = (const u16*)pixels;
+    for (u32 y = 0; y < CHAT_FOTO_MINI_ALTO; ++y) {
+        for (u32 x = 0; x < CHAT_FOTO_MINI_ANCHO; ++x) {
+            u32 tile = (y / 8) * (anchoTextura / 8) + (x / 8);
+            u32 destino = tile * 64 + indiceMorton(x & 7, y & 7);
+            mosaicosFotoChat[slot][destino] = origen[y * CHAT_FOTO_MINI_ANCHO + x];
+        }
+    }
+    memcpy(texturasFotoChat[slot].data, mosaicosFotoChat[slot], bytesTextura);
+    C3D_TexFlush(&texturasFotoChat[slot]);
+    idsFotoChat[slot] = id;
+    return true;
+}
+
+long idMiniaturaFotoChat(int slot) {
+    return slot >= 0 && slot < 3 && fotoChatTexturaLista[slot] ? idsFotoChat[slot] : 0;
+}
+
+C2D_Image obtenerMiniaturaFotoChat(int slot) {
+    if (slot < 0 || slot >= 3) return C2D_Image();
+    return imagenesFotoChat[slot];
+}
+
+void cerrarMiniaturasFotoChat() {
+    for (int slot = 0; slot < 3; ++slot) {
+        if (fotoChatTexturaLista[slot]) C3D_TexDelete(&texturasFotoChat[slot]);
+        fotoChatTexturaLista[slot] = false;
+        if (mosaicosFotoChat[slot]) linearFree(mosaicosFotoChat[slot]);
+        mosaicosFotoChat[slot] = NULL;
+        imagenesFotoChat[slot].tex = NULL;
+        imagenesFotoChat[slot].subtex = NULL;
+        idsFotoChat[slot] = 0;
     }
 }

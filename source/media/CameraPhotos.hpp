@@ -1,5 +1,8 @@
 #pragma once
 
+// Contrato para cámara, visor y miniaturas RGB565. La captura se actualiza de
+// forma asíncrona; el llamador detiene la sesión al abandonar el estado cámara.
+
 #include <3ds.h>
 #include <citro2d.h>
 #include <string>
@@ -11,6 +14,10 @@ static const u32 FOTO_CAMARA_BYTES = FOTO_CAMARA_ANCHO * FOTO_CAMARA_ALTO * 2;
 // Miniaturas cuadradas usadas en la lista de contactos.
 static const u16 PERFIL_MINIATURA_DIMENSION = 32;
 static const u32 PERFIL_MINIATURA_BYTES = PERFIL_MINIATURA_DIMENSION * PERFIL_MINIATURA_DIMENSION * 2;
+// Vista previa pequeña de fotos dentro de las burbujas del chat.
+static const u16 CHAT_FOTO_MINI_ANCHO = 80;
+static const u16 CHAT_FOTO_MINI_ALTO = 48;
+static const u32 CHAT_FOTO_MINI_BYTES = CHAT_FOTO_MINI_ANCHO * CHAT_FOTO_MINI_ALTO * 2;
 
 // Inicia captura asíncrona. Devuelve false si no se pudo configurar la cámara.
 bool iniciarVistaCamara();
@@ -30,9 +37,14 @@ bool cargarFotoVista(const std::string& ruta);
 void cerrarFotoVista();
 // Devuelve la imagen Citro2D actualmente preparada para dibujarse.
 C2D_Image obtenerFotoVista();
-// Carga en el slot 0..2 la miniatura BGR565 de un contacto.
+// Carga en el slot 0..2 la miniatura RGB565 de un contacto.
 bool cargarMiniaturaContacto(int slot, const std::string& ruta);
 // Devuelve la imagen de miniatura preparada para un slot.
 C2D_Image obtenerMiniaturaContacto(int slot);
 // Libera todas las miniaturas y sus buffers de mosaico.
 void cerrarMiniaturasContactos();
+// Texturas independientes para hasta tres fotos de la página visible del chat.
+bool cargarMiniaturaFotoChat(int slot, long id, const std::string& ruta);
+long idMiniaturaFotoChat(int slot);
+C2D_Image obtenerMiniaturaFotoChat(int slot);
+void cerrarMiniaturasFotoChat();

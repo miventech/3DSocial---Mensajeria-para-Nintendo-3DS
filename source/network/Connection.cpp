@@ -1,5 +1,7 @@
 #include "AppState.hpp"
 
+// Nivel de socket y utilidades de conectividad. El protocolo HTTP y las
+// operaciones de mensajes se implementan en MessagingV2.cpp.
 void encenderLEDBlanco() {
     // Usa ctr-led-brary para indicar que el cliente está activo.
     RGBLedPattern pattern = LED::GeneratePattern(

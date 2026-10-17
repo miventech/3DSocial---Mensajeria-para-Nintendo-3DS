@@ -5,6 +5,8 @@
 #include <string.h>
 #include <algorithm>
 
+// Captura incremental del micrófono y reproducción NDSP. El WAV se escribe a
+// medida que llegan muestras para evitar reservar hasta 30 segundos en RAM.
 static const u32 FRECUENCIA_VOZ = 10910;
 // PCM mono de 16 bits: 10 910 muestras/s × 30 s × 2 bytes por muestra.
 static const u32 MAX_DATOS_VOZ = FRECUENCIA_VOZ * 30 * 2;

@@ -1,4 +1,6 @@
 #include "MessagingV2.hpp"
+#include "HttpSecure.hpp"
+#include "CameraPhotos.hpp"
 #include <sys/socket.h>
 #include <sys/select.h>
 #include <unistd.h>
@@ -8,14 +10,45 @@
 #include <sstream>
 #include <cstring>
 
+// HTTP/1.1 sobre sockets BSD. El modo cifrado encapsula todas las rutas en
+// /canal mediante HttpSecure.cpp; esta ruta solo sirve al modo sin cifrado.
 extern int conectarAlServidor();
 extern std::string hostHttp();
+extern std::string miID;
+extern std::string g_tokenSesion;
+extern std::string g_hostSesion;
+extern int g_puertoSesion;
+extern bool g_cifradoSesion;
+extern std::string g_servidorHost;
+extern int g_servidorPuerto;
+extern bool g_cifrarConexion;
 
-static bool enviarTodo(int sock, const void* datos, size_t longitud) {
-    // send() puede aceptar solo una parte; repetir hasta enviar el bloque completo.
+struct CanalConexion {
+    int sock = -1;
+
+    ~CanalConexion() {
+        if (sock >= 0) close(sock);
+    }
+
+    bool abrir() {
+        sock = conectarAlServidor();
+        return sock >= 0;
+    }
+
+    int leer(void* datos, size_t longitud) {
+        fd_set disponibles;
+        FD_ZERO(&disponibles);
+        FD_SET(sock, &disponibles);
+        timeval limite = {5, 0};
+        if (select(sock + 1, &disponibles, NULL, NULL, &limite) <= 0) return -1;
+        return recv(sock, datos, longitud, 0);
+    }
+};
+
+static bool enviarTodo(CanalConexion& canal, const void* datos, size_t longitud) {
     const u8* actual = static_cast<const u8*>(datos);
     while (longitud > 0) {
-        int enviados = send(sock, actual, longitud, 0);
+        int enviados = send(canal.sock, actual, longitud, 0);
         if (enviados <= 0) return false;
         actual += enviados;
         longitud -= enviados;
@@ -23,56 +56,14 @@ static bool enviarTodo(int sock, const void* datos, size_t longitud) {
     return true;
 }
 
-static bool esperarLectura(int sock) {
-    // Evita que una respuesta HTTP silenciosa bloquee indefinidamente la interfaz.
-    fd_set lectura;
-    FD_ZERO(&lectura);
-    FD_SET(sock, &lectura);
-    struct timeval espera = {5, 0};
-    return select(sock + 1, &lectura, NULL, NULL, &espera) > 0;
-}
-
-static bool pedirHttpInterno(const std::string& metodo, const std::string& ruta, const char* tipo,
-                            const std::string& archivo, const std::string* datos,
-                            RespuestaHttp& respuesta, size_t maxCuerpo) {
-    // Centraliza envíos desde archivo o memoria y limita el cuerpo recibido.
-    respuesta = RespuestaHttp();
-    FILE* entrada = NULL;
-    long longitud = 0;
-    if (!archivo.empty()) {
-        entrada = fopen(archivo.c_str(), "rb");
-        if (!entrada) return false;
-        if (fseek(entrada, 0, SEEK_END) != 0 || (longitud = ftell(entrada)) < 0 ||
-            fseek(entrada, 0, SEEK_SET) != 0) {
-            fclose(entrada);
-            return false;
-        }
-    }
-    if (datos) longitud = datos->size();
-
-    int sock = conectarAlServidor();
-    if (sock < 0) { if (entrada) fclose(entrada); return false; }
-    std::string cabecera = metodo + " " + ruta + " HTTP/1.1\r\nHost: " + hostHttp() +
-        "\r\nConnection: close\r\n";
-    if (entrada || datos) cabecera += std::string("Content-Type: ") + tipo + "\r\nContent-Length: " +
-        std::to_string(longitud) + "\r\n";
-    cabecera += "\r\n";
-    bool correcto = enviarTodo(sock, cabecera.data(), cabecera.size());
-    if (correcto && datos) correcto = enviarTodo(sock, datos->data(), datos->size());
+static bool recibirRespuesta(CanalConexion& canal, RespuestaHttp& respuesta, size_t maxCuerpo) {
     u8 bloque[4096];
-    while (correcto && entrada) {
-        size_t leidos = fread(bloque, 1, sizeof(bloque), entrada);
-        if (leidos == 0) { correcto = !ferror(entrada); break; }
-        correcto = enviarTodo(sock, bloque, leidos);
-    }
-    if (entrada) fclose(entrada);
-
     std::vector<u8> recibido;
     size_t finCabecera = std::string::npos;
     long longitudCuerpo = -1;
-    // Lee hasta completar Content-Length o hasta que el servidor cierre la conexión.
-    while (correcto && esperarLectura(sock)) {
-        int leidos = recv(sock, bloque, sizeof(bloque), 0);
+    bool correcto = true;
+    while (correcto) {
+        int leidos = canal.leer(bloque, sizeof(bloque));
         if (leidos < 0) { correcto = false; break; }
         if (leidos == 0) break;
         recibido.insert(recibido.end(), bloque, bloque + leidos);
@@ -93,13 +84,59 @@ static bool pedirHttpInterno(const std::string& metodo, const std::string& ruta,
             if (longitudCuerpo >= 0 && recibido.size() - finCabecera >= (size_t)longitudCuerpo) break;
         }
     }
-    close(sock);
     if (!correcto || finCabecera == std::string::npos ||
         (longitudCuerpo >= 0 && recibido.size() - finCabecera < (size_t)longitudCuerpo)) return false;
     size_t longitudFinal = longitudCuerpo >= 0 ? (size_t)longitudCuerpo : recibido.size() - finCabecera;
     respuesta.cuerpo.assign(recibido.begin() + finCabecera,
                            recibido.begin() + finCabecera + longitudFinal);
     return true;
+}
+
+static bool pedirHttpInterno(const std::string& metodo, const std::string& ruta, const char* tipo,
+                            const std::string& archivo, const std::string* datos,
+                            RespuestaHttp& respuesta, size_t maxCuerpo) {
+    if (g_cifrarConexion)
+        return pedirHttpSeguro(metodo, ruta, tipo, archivo, datos, respuesta, maxCuerpo);
+    // Centraliza envíos desde archivo o memoria y limita el cuerpo recibido.
+    respuesta = RespuestaHttp();
+    FILE* entrada = NULL;
+    long longitud = 0;
+    if (!archivo.empty()) {
+        entrada = fopen(archivo.c_str(), "rb");
+        if (!entrada) return false;
+        if (fseek(entrada, 0, SEEK_END) != 0 || (longitud = ftell(entrada)) < 0 ||
+            fseek(entrada, 0, SEEK_SET) != 0) {
+            fclose(entrada);
+            return false;
+        }
+    }
+    if (datos) longitud = datos->size();
+
+    CanalConexion canal;
+    if (!canal.abrir()) {
+        if (entrada) fclose(entrada);
+        return false;
+    }
+    std::string cabecera = metodo + " " + ruta + " HTTP/1.1\r\nHost: " + hostHttp() +
+        "\r\nConnection: close\r\n";
+    if (!miID.empty()) cabecera += "X-User-ID: " + miID + "\r\n";
+    if (!g_tokenSesion.empty() && g_hostSesion == g_servidorHost &&
+        g_puertoSesion == g_servidorPuerto && g_cifradoSesion == g_cifrarConexion)
+        cabecera += "Authorization: Bearer " + g_tokenSesion + "\r\n";
+    if (entrada || datos) cabecera += std::string("Content-Type: ") + tipo + "\r\nContent-Length: " +
+        std::to_string(longitud) + "\r\n";
+    cabecera += "\r\n";
+    bool correcto = enviarTodo(canal, cabecera.data(), cabecera.size());
+    if (correcto && datos) correcto = enviarTodo(canal, datos->data(), datos->size());
+    u8 bloque[4096];
+    while (correcto && entrada) {
+        size_t leidos = fread(bloque, 1, sizeof(bloque), entrada);
+        if (leidos == 0) { correcto = !ferror(entrada); break; }
+        correcto = enviarTodo(canal, bloque, leidos);
+    }
+    if (entrada) fclose(entrada);
+
+    return correcto && recibirRespuesta(canal, respuesta, maxCuerpo);
 }
 
 bool pedirHttp(const std::string& metodo, const std::string& ruta, const char* tipo,
@@ -189,6 +226,20 @@ bool descargarFoto(long idMensaje, const std::string& archivo) {
     if (!pedirHttp("GET", "/foto/" + std::to_string(idMensaje), NULL, "", respuesta,
                    bytesEsperados) || respuesta.estado != 200 ||
         respuesta.cuerpo.size() != bytesEsperados) return false;
+    FILE* salida = fopen(archivo.c_str(), "wb");
+    if (!salida) return false;
+    bool correcto = fwrite(respuesta.cuerpo.data(), 1, respuesta.cuerpo.size(), salida) ==
+                    respuesta.cuerpo.size();
+    correcto = fclose(salida) == 0 && correcto;
+    if (!correcto) remove(archivo.c_str());
+    return correcto;
+}
+
+bool descargarMiniaturaFoto(long idMensaje, const std::string& archivo) {
+    RespuestaHttp respuesta;
+    if (!pedirHttp("GET", "/foto-miniatura/" + std::to_string(idMensaje), NULL, "",
+                   respuesta, CHAT_FOTO_MINI_BYTES) || respuesta.estado != 200 ||
+        respuesta.cuerpo.size() != CHAT_FOTO_MINI_BYTES) return false;
     FILE* salida = fopen(archivo.c_str(), "wb");
     if (!salida) return false;
     bool correcto = fwrite(respuesta.cuerpo.data(), 1, respuesta.cuerpo.size(), salida) ==

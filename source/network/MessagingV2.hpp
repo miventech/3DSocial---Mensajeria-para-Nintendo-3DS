@@ -1,5 +1,8 @@
 #pragma once
 
+// Contrato de transporte del cliente. Las respuestas se limitan por maxCuerpo;
+// las descargas se reciben en memoria y luego se guardan en disco.
+
 #include <3ds.h>
 #include <string>
 #include <vector>
@@ -22,7 +25,11 @@ struct RespuestaHttp {
     std::vector<u8> cuerpo;
 };
 
-// Solicita un archivo como cuerpo, útil para descargas de audio/foto.
+// Olvida la clave pública fijada para el servidor actual tras una rotación explícita.
+bool olvidarClaveServidor();
+
+// Ejecuta una solicitud y, si archivo no está vacío, envía ese archivo como cuerpo;
+// el cuerpo de respuesta queda en memoria hasta el límite indicado.
 bool pedirHttp(const std::string& metodo, const std::string& ruta, const char* tipo,
                const std::string& archivo, RespuestaHttp& respuesta, size_t maxCuerpo);
 // Envía texto/binario en memoria y recoge una respuesta HTTP acotada.
@@ -41,3 +48,5 @@ bool enviarFoto(const std::string& propio, const std::string& amigo,
                 const std::string& archivo, long& idMensaje);
 // Descarga la foto RGB565 identificada y la guarda en la ruta de caché.
 bool descargarFoto(long idMensaje, const std::string& archivo);
+// Descarga solo la vista previa 80×48 del mensaje de foto.
+bool descargarMiniaturaFoto(long idMensaje, const std::string& archivo);
