@@ -1,0 +1,30 @@
+# Compilaciones de Nintendo 3DS / devkitPro
+build/
+/build-*/
+*.o
+*.d
+*.elf
+*.3dsx
+*.cia
+*.smdh
+*.bnr
+*.map
+*.lst
+*.t3x
+*.shbin
+*.a
+
+# Herramienta local instalada fuera de devkitPro
+/bannertool.exe
+
+# Archivos temporales de Python y datos locales de los servidores
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+*.sqlite3
+*.sqlite3-*
+
+# Carpeta local reservada para contenido que no se versiona
+/IgnoreFolder/

@@ -1,0 +1,131 @@
+BasicInfo:
+  Title                   : "3DSocial"
+  CompanyCode             : "MV"
+  ProductCode             : "CTR-P-3DSC"
+  ContentType             : Application
+  Logo                    : Nintendo
+
+TitleInfo:
+  UniqueId                : 0xF9F8F
+  Category                : Application
+  Variation               : "01"
+  Version                 : 1.2.4
+
+Option:
+  UseOnSD                 : true
+  FreeProductCode         : true
+  MediaFootPadding        : false
+  EnableCrypt             : false
+  EnableCompress          : true
+
+AccessControlInfo:
+  CoreVersion             : 2
+  DescVersion             : 2
+  ReleaseKernelMajor      : "02"
+  ReleaseKernelMinor      : "33"
+
+  FileSystemAccess:
+    - DirectSdmc
+    - DirectSdmcWrite
+
+  MemoryType               : Application
+  SystemMode               : 64MB
+  IdealProcessor           : 0
+  AffinityMask             : 1
+  Priority                 : 16
+  MaxCpu                   : 0x9E
+  HandleTableSize          : 0x200
+  DisableDebug             : false
+  EnableForceDebug         : true
+  CanWriteSharedPage       : true
+  CanUsePrivilegedPriority : false
+  CanUseNonAlphabetAndNumber: true
+  PermitMainFunctionArgument: true
+  CanShareDeviceMemory     : true
+  RunnableOnSleep          : false
+  SpecialMemoryArrange     : false
+
+  SystemCallAccess:
+    ArbitrateAddress: 34
+    Break: 60
+    CancelTimer: 28
+    ClearEvent: 25
+    ClearTimer: 29
+    CloseHandle: 35
+    ConnectToPort: 45
+    ControlMemory: 1
+    CreateAddressArbiter: 33
+    CreateEvent: 23
+    CreateMemoryBlock: 30
+    CreateMutex: 19
+    CreateSemaphore: 21
+    CreateThread: 8
+    CreateTimer: 26
+    ControlProcessMemory: 4
+    DuplicateHandle: 39
+    ExitProcess: 3
+    ExitThread: 9
+    GetCurrentProcessorNumber: 17
+    GetHandleInfo: 41
+    GetProcessId: 53
+    GetProcessIdOfThread: 54
+    GetProcessIdealProcessor: 6
+    GetProcessInfo: 43
+    GetResourceLimit: 56
+    GetResourceLimitCurrentValues: 58
+    GetResourceLimitLimitValues: 57
+    GetSystemInfo: 42
+    GetSystemTick: 40
+    GetThreadContext: 59
+    GetThreadId: 55
+    GetThreadIdealProcessor: 15
+    GetThreadInfo: 44
+    GetThreadPriority: 11
+    MapMemoryBlock: 31
+    OutputDebugString: 61
+    QueryMemory: 2
+    ReleaseMutex: 20
+    ReleaseSemaphore: 22
+    SendSyncRequest1: 46
+    SendSyncRequest2: 47
+    SendSyncRequest3: 48
+    SendSyncRequest4: 49
+    SendSyncRequest: 50
+    SetThreadPriority: 12
+    SetTimer: 27
+    SignalEvent: 24
+    SleepThread: 10
+    UnmapMemoryBlock: 32
+    WaitSynchronization1: 36
+    WaitSynchronizationN: 37
+
+
+  IORegisterMapping:
+    - 1ff00000-1ff7ffff
+
+  MemoryMapping:
+    - 1f000000-1f5fffff:r
+
+  ServiceAccessControl:
+    - APT:U
+    - hid:USER
+    - gsp::Gpu
+    - gsp::Lcd
+    - gsp::App
+    - ndm:u
+    - boss:U
+    - soc:U
+    - fs:USER
+    - cfg:u
+    - ptm:u
+    - swkbd:I
+    - swkbd:e
+    - apt:s
+    - apt:u
+    - http:c
+    - ssl:C
+    - dsp::DSP
+
+SystemControlInfo:
+  RemasterVersion: 3
+  StackSize: 0x8000
