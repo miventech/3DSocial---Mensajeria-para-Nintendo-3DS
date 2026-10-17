@@ -25,6 +25,8 @@ __pycache__/
 venv/
 *.sqlite3
 *.sqlite3-*
+*.key
+/ServerExample/tls/
 
 # Carpeta local reservada para contenido que no se versiona
 /IgnoreFolder/

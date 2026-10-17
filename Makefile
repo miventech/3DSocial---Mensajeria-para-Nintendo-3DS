@@ -18,9 +18,9 @@ APP_DESCRIPTION := App Social de Comunicación para 3DS
 APP_AUTHOR      := Miventech
 
 BUILD           := build
-SOURCES         := source/app source/gui source/system source/network source/media
+SOURCES         := source/app source/gui source/system source/network source/media source/crypto
 DATA            := data
-INCLUDES        := include source source/app source/gui source/system source/network source/media ctr-led-brary/source ctr-led-brary/include ctr-led-brary/lib
+INCLUDES        := include source source/app source/gui source/system source/network source/media source/crypto ctr-led-brary/source ctr-led-brary/include ctr-led-brary/lib
 GRAPHICS        := gfx
 GFXBUILD        := $(BUILD)
 
@@ -162,6 +162,9 @@ else
 $(OUTPUT).3dsx  :   $(OUTPUT).elf $(_3DSXDEPS)
 
 $(OFILES_SOURCES) : $(HFILES)
+# AppState.hpp define la disposición de Contacto usada por varios módulos.
+# Forzar su recompilación incluso si faltan los archivos .d evita mezclar ABI.
+$(OFILES_SOURCES) : $(TOPDIR)/source/app/AppState.hpp
 
 $(OUTPUT).elf   :   $(OFILES)
 
