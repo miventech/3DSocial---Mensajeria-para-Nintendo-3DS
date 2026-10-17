@@ -144,7 +144,7 @@ El servidor de ejemplo usa HTTP sin cifrado y los IDs no autentican usuarios. Ú
 
 ## Origen y agradecimientos
 
-3DSocial nació de la base y la idea de [Mensinger3DS-Backend, de GABXRIEL](https://github.com/GABXRIEL/Mensinger3DS-Backend). Es el proyecto padre y la inspiración de esta herramienta. Gracias a **GABXRIEL** por ese trabajo original y por abrir el camino para seguir experimentando con mensajería en Nintendo 3DS.
+3DSocial nació de la base y la idea de [Mensinger3DS-Backend](https://github.com/GABXRIEL/Mensinger3DS-Backend), creado por [GABXRIEL](https://github.com/GABXRIEL). Es el proyecto padre y la inspiración de esta herramienta. Gracias a GABXRIEL por ese trabajo original y por abrir el camino para seguir experimentando con mensajería en Nintendo 3DS.
 
 Gracias también a las comunidades y herramientas de **devkitPro/libctru**, **Luma3DS/Rosalina**, **PabloMK7** por `ctr-led-brary` (licencia en [su README](ctr-led-brary/README.md)) y al proyecto **FBI**, cuyo flujo de captura de cámara se reconoce en [THIRD_PARTY_FBI_LICENSE.txt](THIRD_PARTY_FBI_LICENSE.txt).
 
