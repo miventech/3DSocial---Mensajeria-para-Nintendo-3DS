@@ -1,4 +1,4 @@
-**English** | [Español](README.es.md)
+**English** | [Español-Latam](README.es.md)
 
 # 3DSocial, by Miventech
 
